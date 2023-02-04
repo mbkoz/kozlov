@@ -19,14 +19,17 @@ import okhttp3.Response;
 
 class FilmDescription{
     final String id;
-    final String genre;
+    
+    final String name;
     final String year;
-    final String posterUrl;
-    FilmDescription(String id, String genre, String year, String posterUrl) {
+    final String previewUrl;
+    final String genre;
+    FilmDescription(String id, String name, String year, String previewUrl, String genre) {
         this.id = id;
-        this.genre = genre;
+        this.name = name;
         this.year = year;
-        this.posterUrl = posterUrl;
+        this.previewUrl = previewUrl;
+        this.genre = genre;
     }
 }
 
@@ -82,7 +85,29 @@ public class MainActivity extends AppCompatActivity {
             String test = null;
             try {
                 JSONObject jsonObject = new JSONObject(s);
-                test = jsonObject.getJSONArray("films").getJSONObject(0).getString("nameRu").toString();
+                //test = jsonObject.getJSONArray("films").getJSONObject(0).getString("nameRu").toString();
+
+                final int maxCount = jsonObject.getJSONArray("films").length();
+                for(int i = 0; i < maxCount; ++i){
+                    JSONObject fdObject = jsonObject.getJSONArray("films").getJSONObject(i);
+
+                    String genres = fdObject.getJSONArray("genres").getJSONObject(0).getString("genre");
+                    int maxCountGenre = fdObject.getJSONArray("genres").length();
+                    for(int j = 0; j < maxCountGenre; ++j){
+                        genres += " ," + fdObject.getJSONArray("genres").getJSONObject(j).getString("genre");
+                    }
+
+                    alCache.add(
+                        new FilmDescription(
+                            fdObject.getString("filmId"),
+                            fdObject.getString("nameRu"),
+                            fdObject.getString("year"),
+                            fdObject.getString("posterUrlPreview"),
+                            genres
+                        )
+                    );
+                }
+
             } catch (JSONException e) {
                 throw new RuntimeException(e);
             }
