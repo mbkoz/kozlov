@@ -1,26 +1,28 @@
 package com.example.top100list;
 
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.cardview.widget.CardView;
-
 import android.app.ProgressDialog;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.view.LayoutInflater;
+import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
+
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.IOException;
 import java.io.InputStream;
-import java.lang.String;
 import java.util.ArrayList;
 import java.util.Iterator;
 
@@ -29,25 +31,7 @@ import okhttp3.Request;
 import okhttp3.Response;
 
 
-class FilmDescription{
-    private final String id;
 
-    private final String name;
-    private final String year;
-    private final String previewUrl;
-    private final String genre;
-    FilmDescription(String id, String name, String year, String previewUrl, String genre) {
-        this.id = id;
-        this.name = name;
-        this.year = year;
-        this.previewUrl = previewUrl;
-        this.genre = genre;
-    }
-
-    public String getFilmName(){return name;}
-    public String getFilmGenre(){return genre;}
-    public String getPreviewUrl(){return previewUrl;}
-}
 
 class FilmCard extends FrameLayout {
     private Context mContext;
@@ -66,13 +50,27 @@ class FilmCard extends FrameLayout {
         TextView tv = this.findViewById(R.id.textView2);
         tv.setText(filmDescription.getFilmName());
         tv = this.findViewById(R.id.textView3);
-        tv.setText(filmDescription.getFilmGenre());
+        tv.setText(new StringBuilder().append(filmDescription.getFilmGenre()).append(" (").append(filmDescription.getYear()).append(")").toString());
 
         image = this.findViewById(R.id.imageView2);
 
         DownloadImage downloadImage = new DownloadImage();
         downloadImage.execute(filmDescription.getPreviewUrl());
+
+        this.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Intent intent = new Intent(mContext, FilmDescriptionActivity.class);
+                intent.putExtra("id", filmDescription.getId());
+                intent.putExtra("posterUrl", filmDescription.getPosterUrl());
+                intent.putExtra("name", filmDescription.getFilmName());
+                intent.putExtra("genre", filmDescription.getFilmGenre());
+                mContext.startActivity(intent);
+            }
+        });
     }
+
+
 
     private void inflate() {
         layoutInflater = (LayoutInflater) mContext
@@ -115,37 +113,81 @@ class FilmCard extends FrameLayout {
 
 
 public class MainActivity extends AppCompatActivity {
-    OkHttpClient client = new OkHttpClient();
-    ArrayList<FilmDescription> alCache = new ArrayList<FilmDescription>();
-    LinearLayout ml;
-    public String url= "https://kinopoiskapiunofficial.tech/api/v2.2/films/top?type=TOP_100_POPULAR_FILMS&page=";
+    //TODO: сделать производный класс от загрузчика, который бы выводил окно прогресса и вызывать его в первый раз
+    private final OkHttpHandler[] okHttpHandlerArr = new OkHttpHandler[5];
+    private final ArrayList<FilmDescription> alCache = new ArrayList<FilmDescription>();
+    private LinearLayout ml;
+    //TODO при создании производного класса, перенести это поле туда
+    private ProgressDialog mProgressDialog;
+
+    private boolean needReload = false;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        for(int i = 1; i <= 1; ++i) {
-            OkHttpHandler okHttpHandler = new OkHttpHandler();
-            okHttpHandler.execute(url + i);
+        final String url= "https://kinopoiskapiunofficial.tech/api/v2.2/films/top?type=TOP_100_POPULAR_FILMS&page=";
+        for(int i = 1; i <= 5; ++i) {
+            okHttpHandlerArr[i - 1] = new OkHttpHandler();
+            okHttpHandlerArr[i - 1].execute(url + i);
         }
 
         ml = findViewById(R.id.mainLayout);
+    }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
 
+        if(needReload) {
+            needReload = false;
+            reloadData();
+        }
+    }
+
+    public void reloadData(){
+        String url= "https://kinopoiskapiunofficial.tech/api/v2.2/films/top?type=TOP_100_POPULAR_FILMS&page=";
+        for(int i = 1; i <= 5; ++i) {
+            okHttpHandlerArr[i - 1] = new OkHttpHandler();
+            okHttpHandlerArr[i - 1].execute(url + i);
+        }
     }
 
     private void addFilmCards(@NonNull Iterator<FilmDescription> iter){
-        //TODO: добавить reset для сброса сцена при отображении избранных фильмов
         while(iter.hasNext()){
             FilmCard filmCard = new FilmCard((Context) this, iter.next());
             ml.addView(filmCard);
         }
     }
 
-    public class OkHttpHandler extends AsyncTask<String, String, String> {
+    private void resetList(){
+        ml.removeAllViews();
+    }
 
+    private void connectionLost(){
+        resetList();
+        for(int i = 0; i < 5; ++i)
+            okHttpHandlerArr[i].cancel(false);
+        //TODO переключиться на другой экран
+        needReload = true;
+        Intent intent = new Intent(this, NoConnectioActivity.class);
+        startActivity(intent);
+    }
+
+    public class OkHttpHandler extends AsyncTask<String, String, String> {
         OkHttpClient client = new OkHttpClient();
 
+        @Override
+        protected void onPreExecute() {
+            super.onPreExecute();
+            if(mProgressDialog == null) {
+                mProgressDialog = new ProgressDialog(MainActivity.this);
+                mProgressDialog.setTitle("Download TOP 100 FILMS LIST");
+                mProgressDialog.setMessage("Loading...");
+                mProgressDialog.setIndeterminate(false);
+                mProgressDialog.show();
+            }
+        }
         @Override
         protected String doInBackground(@NonNull String...params) {
 
@@ -155,18 +197,21 @@ public class MainActivity extends AppCompatActivity {
             Request request = builder.build();
 
             try {
-                Response response = client.newCall(request).execute();
-                return response.body().string();
-            }catch (Exception e){
-                e.printStackTrace();
+                try (Response response = client.newCall(request).execute()) {
+                    return response.body().string();
+                }
+
+            }catch (IOException ioException){
+                //TODO: вызвать метод, который сотрет все виджеты и выведет ошибку подключения
+                // с кнопкой перезапуска соединения (и остановит остальные асинхронные запросы)
+                if(mProgressDialog != null && mProgressDialog.isShowing())
+                    mProgressDialog.dismiss();
+                connectionLost();
             }
-            //TODO: добавить закрытие соединения
+
             return null;
         }
 
-        //нужно через такие запросы загружать по 20 фильмов
-        //и по факту загрузки помещать данные в контейнер для вывода (без рисунков)
-        // рисунки будут загружаться самими холдерами описания
         @Override
         protected void onPostExecute(String s) {
             super.onPostExecute(s);
@@ -191,7 +236,8 @@ public class MainActivity extends AppCompatActivity {
                             fdObject.getString("nameRu"),
                             fdObject.getString("year"),
                             fdObject.getString("posterUrlPreview"),
-                            genres.toString()
+                            genres.toString(),
+                            fdObject.getString("posterUrl")
                         )
                     );
                 }
@@ -201,6 +247,8 @@ public class MainActivity extends AppCompatActivity {
             }
 
             addFilmCards(alCache.listIterator(shift));
+            if(mProgressDialog != null && mProgressDialog.isShowing())
+                mProgressDialog.dismiss();
         }
     }
 }
