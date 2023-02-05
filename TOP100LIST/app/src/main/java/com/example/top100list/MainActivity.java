@@ -1,9 +1,19 @@
 package com.example.top100list;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.cardview.widget.CardView;
 
+import android.content.Context;
+import android.graphics.Color;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.text.Layout;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.widget.CheckBox;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import org.json.JSONException;
@@ -11,6 +21,7 @@ import org.json.JSONObject;
 
 import java.lang.String;
 import java.util.ArrayList;
+import java.util.Iterator;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -18,12 +29,12 @@ import okhttp3.Response;
 
 
 class FilmDescription{
-    final String id;
-    
-    final String name;
-    final String year;
-    final String previewUrl;
-    final String genre;
+    private final String id;
+
+    private final String name;
+    private final String year;
+    private final String previewUrl;
+    private final String genre;
     FilmDescription(String id, String name, String year, String previewUrl, String genre) {
         this.id = id;
         this.name = name;
@@ -31,28 +42,67 @@ class FilmDescription{
         this.previewUrl = previewUrl;
         this.genre = genre;
     }
+
+    public String getFilmName(){return name;}
+    public String getFilmGenre(){return genre;}
 }
 
+class FilmCard extends FrameLayout {
+
+    private Context mContext;
+    private LayoutInflater layoutInflater;
+    private FilmDescription filmDescription;
+
+    public FilmCard (Context context, FilmDescription filmDescription) {
+        super(context);
+        this.mContext = context;
+        inflate();
+        bindViews();
+
+        this.filmDescription = filmDescription;
+
+        TextView tv = this.findViewById(R.id.textView2);
+        tv.setText(filmDescription.getFilmName());
+        tv = this.findViewById(R.id.textView3);
+        tv.setText(filmDescription.getFilmGenre());
+    }
+
+    private void inflate() {
+        layoutInflater = (LayoutInflater) mContext
+                .getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+        layoutInflater.inflate(R.layout.film_card, this, true);
+    }
+
+    private void bindViews() {
+        // bind all views here
+    }
+}
+
+
 public class MainActivity extends AppCompatActivity {
-    private TextView textView;
     OkHttpClient client = new OkHttpClient();
     ArrayList<FilmDescription> alCache = new ArrayList<FilmDescription>();
-    public String url= "https://kinopoiskapiunofficial.tech/api/v2.2/films/top?type=TOP_100_POPULAR_FILMS&page=1";
+    LinearLayout ml;
+    public String url= "https://kinopoiskapiunofficial.tech/api/v2.2/films/top?type=TOP_100_POPULAR_FILMS&page=";
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        textView = findViewById(R.id.testField);
+        for(int i = 1; i <= 5; ++i) {
+            OkHttpHandler okHttpHandler = new OkHttpHandler();
+            okHttpHandler.execute(url + i);
+        }
 
-        OkHttpHandler okHttpHandler= new OkHttpHandler();
-        okHttpHandler.execute(url);
-
-
+        ml = findViewById(R.id.mainLayout);
     }
 
-    private void addFilmHolders(){
-
+    private void addFilmCards(@NonNull Iterator<FilmDescription> iter){
+        //TODO: добавить reset для сброса сцена при отображении избранных фильмов
+        while(iter.hasNext()){
+            FilmCard filmCard = new FilmCard((Context) this, iter.next());
+            ml.addView(filmCard);
+        }
     }
 
     public class OkHttpHandler extends AsyncTask<String, String, String> {
@@ -60,7 +110,7 @@ public class MainActivity extends AppCompatActivity {
         OkHttpClient client = new OkHttpClient();
 
         @Override
-        protected String doInBackground(String...params) {
+        protected String doInBackground(@NonNull String...params) {
 
             Request.Builder builder = new Request.Builder();
             builder.url(params[0]);
@@ -73,6 +123,7 @@ public class MainActivity extends AppCompatActivity {
             }catch (Exception e){
                 e.printStackTrace();
             }
+            //TODO: добавить закрытие соединения
             return null;
         }
 
@@ -82,19 +133,19 @@ public class MainActivity extends AppCompatActivity {
         @Override
         protected void onPostExecute(String s) {
             super.onPostExecute(s);
-            String test = null;
+            int shift = alCache.size();
+
             try {
                 JSONObject jsonObject = new JSONObject(s);
-                //test = jsonObject.getJSONArray("films").getJSONObject(0).getString("nameRu").toString();
 
                 final int maxCount = jsonObject.getJSONArray("films").length();
                 for(int i = 0; i < maxCount; ++i){
                     JSONObject fdObject = jsonObject.getJSONArray("films").getJSONObject(i);
 
-                    String genres = fdObject.getJSONArray("genres").getJSONObject(0).getString("genre");
+                    StringBuilder genres = new StringBuilder(fdObject.getJSONArray("genres").getJSONObject(0).getString("genre"));
                     int maxCountGenre = fdObject.getJSONArray("genres").length();
-                    for(int j = 0; j < maxCountGenre; ++j){
-                        genres += " ," + fdObject.getJSONArray("genres").getJSONObject(j).getString("genre");
+                    for(int j = 1; j < maxCountGenre; ++j){
+                        genres.append(", ").append(fdObject.getJSONArray("genres").getJSONObject(j).getString("genre"));
                     }
 
                     alCache.add(
@@ -103,7 +154,7 @@ public class MainActivity extends AppCompatActivity {
                             fdObject.getString("nameRu"),
                             fdObject.getString("year"),
                             fdObject.getString("posterUrlPreview"),
-                            genres
+                            genres.toString()
                         )
                     );
                 }
@@ -111,7 +162,9 @@ public class MainActivity extends AppCompatActivity {
             } catch (JSONException e) {
                 throw new RuntimeException(e);
             }
-            textView.setText(test);
+
+            //TODO: добавить смещение на ранее выведенные фильмы
+            addFilmCards(alCache.listIterator(shift));
         }
     }
 }
