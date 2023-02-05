@@ -4,21 +4,22 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
 
+import android.app.ProgressDialog;
 import android.content.Context;
-import android.graphics.Color;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.text.Layout;
 import android.view.LayoutInflater;
-import android.view.View;
-import android.widget.CheckBox;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.InputStream;
 import java.lang.String;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -45,13 +46,14 @@ class FilmDescription{
 
     public String getFilmName(){return name;}
     public String getFilmGenre(){return genre;}
+    public String getPreviewUrl(){return previewUrl;}
 }
 
 class FilmCard extends FrameLayout {
-
     private Context mContext;
     private LayoutInflater layoutInflater;
     private FilmDescription filmDescription;
+    private ImageView image;
 
     public FilmCard (Context context, FilmDescription filmDescription) {
         super(context);
@@ -65,6 +67,11 @@ class FilmCard extends FrameLayout {
         tv.setText(filmDescription.getFilmName());
         tv = this.findViewById(R.id.textView3);
         tv.setText(filmDescription.getFilmGenre());
+
+        image = this.findViewById(R.id.imageView2);
+
+        DownloadImage downloadImage = new DownloadImage();
+        downloadImage.execute(filmDescription.getPreviewUrl());
     }
 
     private void inflate() {
@@ -76,6 +83,34 @@ class FilmCard extends FrameLayout {
     private void bindViews() {
         // bind all views here
     }
+
+
+    private class DownloadImage extends AsyncTask<String, String, Bitmap> {
+        @Override
+        protected void onPreExecute() {
+            super.onPreExecute();
+        }
+        @Override
+        protected Bitmap doInBackground(String... URL) {
+            String imageURL = URL[0];
+            Bitmap bitmap = null;
+            try {
+                // Download Image from URL
+                InputStream input = new java.net.URL(imageURL).openStream();
+                // Decode Bitmap
+                bitmap = BitmapFactory.decodeStream(input);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return bitmap;
+        }
+        @Override
+        protected void onPostExecute(Bitmap result) {
+            // Set the bitmap into ImageView
+            image.setImageBitmap(result);
+        }
+    }
+
 }
 
 
@@ -89,12 +124,14 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        for(int i = 1; i <= 5; ++i) {
+        for(int i = 1; i <= 1; ++i) {
             OkHttpHandler okHttpHandler = new OkHttpHandler();
             okHttpHandler.execute(url + i);
         }
 
         ml = findViewById(R.id.mainLayout);
+
+
     }
 
     private void addFilmCards(@NonNull Iterator<FilmDescription> iter){
@@ -163,7 +200,6 @@ public class MainActivity extends AppCompatActivity {
                 throw new RuntimeException(e);
             }
 
-            //TODO: добавить смещение на ранее выведенные фильмы
             addFilmCards(alCache.listIterator(shift));
         }
     }
